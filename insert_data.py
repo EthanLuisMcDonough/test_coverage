@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
-import sqlite3
 import json
+import sqlite3
 import os
 import re
 import subprocess
@@ -17,6 +17,15 @@ def log_errors(err):
     with open(resolve_file_local("log.txt"), "a") as file:
         file.write(err + "\n")
 
+def select_options(args, options):
+    opts = []
+    for i in range(len(args) - 1):
+        if args[i] in options:
+            opts.append(args[i])
+            opts.append(args[i + 1])
+    return opts
+
+
 def gen_todo(con, todo_msg):
     check_res = con.execute("SELECT id FROM todo_message WHERE msg = ?", (todo_msg,))
     check_row = check_res.fetchone()
@@ -24,6 +33,12 @@ def gen_todo(con, todo_msg):
         return check_row[0]
     ins_res = con.execute("INSERT INTO todo_message (msg) VALUES (?)", (todo_msg,))
     return ins_res.lastrowid
+
+# options to include in test build if present in test command
+include_opt = ["-fopenmp", "-fopenacc"]
+
+# include options
+param_opt = ["-I", "-J"]
 
 suffixes = [".f", ".F", ".ff", ".FOR", ".for", ".f77", ".f90", ".F90",
             ".ff90", ".f95", ".F95", ".ff95", ".fpp", ".FPP", ".cuf",
@@ -61,7 +76,18 @@ if fortran_files:
         log_errors("Skipping " + file + " (blank program)")
         sys.exit()
     
-    flang_process = subprocess.run([flang_path, "-c", file], capture_output=True)
+    flang_test_args = [flang_path]
+
+    flang_test_args.extend(select_options(sys.argv[1:], param_opt))
+    for opt in filter(lambda o: o in include_opt, sys.argv[1:]):
+        flang_test_args.append(opt)
+    
+    flang_test_args.append("-c")
+    flang_test_args.append(file)
+
+    log_errors("Running " + str(flang_test_args))
+    flang_process = subprocess.run(flang_test_args, capture_output=True)
+    print(flang_process)
     compiled = flang_process.returncode == 0
     stderr = flang_process.stderr.decode()
 
@@ -74,7 +100,7 @@ if fortran_files:
     with sqlite3.connect(resolve_file_local("database.db")) as con:
         check_res = con.execute("SELECT id, name FROM test_file WHERE name = ?", (test_name,))
         if check_res.fetchone() is not None:
-            log_errors("Skipping " + file + "\n" + plugin_process.stderr.decode())
+            log_errors("Skipping " + file)
             sys.exit()
 
         ins_test = con.execute("INSERT INTO test_file (name, can_compile) VALUES (?, ?)", (test_name, compiled))
