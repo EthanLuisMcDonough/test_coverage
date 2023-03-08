@@ -2,6 +2,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 
 suffixes = [".f", ".F", ".ff", ".FOR", ".for", ".f77", ".f90", ".F90",
             ".ff90", ".f95", ".F95", ".ff95", ".fpp", ".FPP", ".cuf",
@@ -30,7 +31,9 @@ replacement_bbc = "bbc=" + inserter_path
 
 test_dir = os.path.join(config.get("source_folder", "llvm-project"), "flang", "test")
 
-for file_path in get_tests(os.path.join(llvm_root, test_dir)):
-    print("Running " + file_path)
+test_paths = get_tests(os.path.join(llvm_root, test_dir))
+
+for index, file_path in enumerate(test_paths, 1):
+    print("[" + str(index) + " / " + str(len(test_paths)) + "] Running " + file_path, flush=True, end="\r")
     cmd_args = [llvm_lit, "-D", replacement_flang, "-D", replacement_bbc, os.path.join(llvm_root, test_dir, file_path)]
-    subprocess.run(cmd_args, cwd=llvm_root)
+    subprocess.run(cmd_args, cwd=llvm_root, capture_output=True)
